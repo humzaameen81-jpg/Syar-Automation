@@ -1,0 +1,30 @@
+
+.cm-content {
+  flex-basis: fit-content;
+}
+.cm-line {
+  white-space: var(--3e6ce55a);
+}
+.codemirror.hide-gutters .cm-gutters {
+  display: none !important;
+}
+.cm-editor {
+  height: 100%;
+  font-size: 15px;
+  padding-bottom: 24px;
+}
+.cm-editor .cm-gutters,
+.cm-editor .cm-content,
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: 'Source Code Pro', Fira code, Fira Mono, Consolas, Menlo, Courier,
+    monospace !important;
+}
+.cm-tooltip-autocomplete {
+  margin-left: 0px;
+  margin-top: 16px;
+}
+.cm-tooltip-autocomplete li[aria-selected] {
+  background-color: #095fff !important;
+  color: #ffffff !important;
+}
+
