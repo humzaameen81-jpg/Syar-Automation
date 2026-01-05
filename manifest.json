@@ -1,100 +1,37 @@
 {
+  "manifest_version": 3,
+  "name": "Syar Automation",
+  "version": "1.0.0",
+  "description": "Automation extension for Syar application",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "identity",
+    "identity.getProfileUserInfo"
+  ],
   "action": {
-    "default_icon": "icon-128.png",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "Syar Automation"
   },
   "background": {
-    "service_worker": "background.bundle.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
-  "commands": {
-    "element-picker": {
-      "description": "Open element picker",
-      "suggested_key": {
-        "default": "Alt+P",
-        "mac": "Alt+P"
-      }
-    },
-    "open-dashboard": {
-      "description": "Open the dashboard",
-      "suggested_key": {
-        "default": "Alt+A",
-        "mac": "Alt+A"
-      }
-    }
+  "host_permissions": [
+    "https://syar.example.com/*",
+    "https://accounts.google.com/*"
+  ],
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
   },
   "content_scripts": [
     {
-      "all_frames": true,
-      "js": [
-        "contentScript.bundle.js"
-      ],
-      "match_about_blank": true,
-      "matches": [
-        "<all_urls>"
-      ],
-      "run_at": "document_start"
-    },
-    {
-      "all_frames": false,
-      "js": [
-        "webService.bundle.js"
-      ],
-      "matches": [
-        "http://localhost/*",
-        "*://*.automa.site/*",
-        "*://automa.vercel.app/*"
-      ],
-      "run_at": "document_start"
-    }
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "icons": {
-    "128": "icon-128.png"
-  },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjELTsup/T477ms/CNpxYjHHDzO2QTxvr6Qz05u9fnM5zzKv4f8g8vT/wKq42x/smvYXzn57TYOcT7ZSpsZjs8USZMHus65vFpt8LrArVRc+3r1BBWA1iD1fr8XVJyDHvkB3GMDbbr6jrkewf2ikjPqst5POgxPegKQtfVKzoX+3i9AMSqE9AwkM0uvclYplptbCzQ/PYxFLzjHVnEUSGIoz7qtTI2EHi7i0nTXq7knC6mChF7LNL4uMg/MNlKqZk8Kglq/EtGMV/S/vgDm6u98gmxhhOPd4vfyuiBCBKp+W9s10q6kdqctqm+zMYvJXCRlAYHkKkDOpb6h1kkSJIFwIDAQAB",
-  "manifest_version": 3,
-  "minimum_chrome_version": "116",
-  "name": "Syar Automation",
-  "optional_permissions": [
-    "cookies",
-    "downloads",
-    "contextMenus",
-    "clipboardRead",
-    "notifications"
-  ],
-  "permissions": [
-    "tabs",
-    "proxy",
-    "alarms",
-    "storage",
-    "debugger",
-    "activeTab",
-    "offscreen",
-    "webNavigation",
-    "unlimitedStorage",
-    "scripting"
-  ],
-  "sandbox": {
-    "pages": [
-      "/sandbox.html"
-    ]
-  },
-  "version": "1.29.12",
-  "web_accessible_resources": [
-    {
-      "matches": [
-        "*://*/*"
-      ],
-      "resources": [
-        "/locales/*",
-        "/icon-128.png",
-        "/elementSelector.css",
-        "elementSelector.bundle.js",
-        "/Inter-roman-latin.var.woff2"
-      ]
+      "matches": ["https://syar.example.com/*"],
+      "js": ["content.js"]
     }
   ]
 }
