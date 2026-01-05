@@ -1,80 +1,236 @@
-(function () {
-  "use strict";
-  // Network guard for the Dashboard UI only.
-  // Purpose: prevent known Automa cloud/telemetry endpoints and Google Drive "Backup Workflows" endpoints
-  // from being called. This does NOT block normal website automation traffic.
+/**
+ * Network Guard - Blocks unauthorized external requests
+ * Prevents all Automa and backup-related network calls
+ * Version: 2.0.0
+ */
 
-  if (!/\/newtab\.html$/i.test(location.pathname)) return;
+(function() {
+  'use strict';
 
-  const BLOCK_HOSTS = new Set([
-    "automa.site",
-    "www.automa.site",
-    "api.automa.site",
-    "automa.app",
-    "www.automa.app",
-    "api.automa.app",
-    "automa-extension.vercel.app",
-    "extension.automa.site",
-    "docs.extension.automa.site",
-    "blog.automa.site",
-    "aipower.automa.site",
-  ]);
-
-  // Some Automa backup flows use Google endpoints; we block only those paths that match backup flows,
-  // not all of Google.
-  const BLOCK_URL_PATTERNS = [
-    /https:\/\/www\.googleapis\.com\/drive\/v3\/files/i,
-    /https:\/\/www\.googleapis\.com\/upload\/drive\/v3\/files/i,
-    /https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth/i,
-    /https:\/\/oauth2\.googleapis\.com\/token/i,
+  // Domains to block
+  const BLOCKED_DOMAINS = [
+    'automa.site',
+    'www.automa.site',
+    'api.automa.site',
+    'automa-api.vercel.app',
+    'automa-backup.vercel.app',
+    'backup.automa.site',
+    'sync.automa.site',
+    'cloud.automa.site',
+    'storage.automa.site'
   ];
 
-  function tryParseURL(u) {
-    try { return new URL(u, location.href); } catch (_) { return null; }
-  }
+  // Patterns to block
+  const BLOCKED_PATTERNS = [
+    /automa.*\.vercel\.app/i,
+    /.*\.automa\.site/i,
+    /automa.*backup/i,
+    /backup.*automa/i
+  ];
 
-  function isBlocked(url) {
-    const u = tryParseURL(url);
-    if (!u) return false;
+  // Keywords in URLs to block
+  const BLOCKED_KEYWORDS = [
+    'automa-backup',
+    'automa-sync',
+    'automa-cloud',
+    'workflow-backup',
+    'workflow-sync',
+    'cloud-backup'
+  ];
 
-    const host = (u.hostname || "").toLowerCase();
-    if (BLOCK_HOSTS.has(host)) return true;
+  // Allowed Google API domains
+  const ALLOWED_GOOGLE_DOMAINS = [
+    'accounts.google.com',
+    'oauth2.googleapis.com',
+    'www.googleapis.com',
+    'sheets.googleapis.com',
+    'drive.googleapis.com',
+    'content.googleapis.com',
+    'storage.googleapis.com'
+  ];
 
-    const full = u.toString();
-    return BLOCK_URL_PATTERNS.some(rx => rx.test(full));
-  }
+  /**
+   * Check if a URL should be blocked
+   */
+  function shouldBlock(url) {
+    if (!url) return false;
+    
+    try {
+      const urlString = url.toString().toLowerCase();
+      const urlObj = new URL(urlString);
+      const hostname = urlObj.hostname.toLowerCase();
+      const fullUrl = urlObj.href.toLowerCase();
 
-  function blockedError() {
-    return new Error("Blocked by Syar Automation: external service disabled");
-  }
-
-  // fetch
-  const nativeFetch = globalThis.fetch;
-  if (typeof nativeFetch === "function") {
-    globalThis.fetch = function (input, init) {
-      const url = (typeof input === "string") ? input : (input && input.url) ? input.url : "";
-      if (url && isBlocked(url)) return Promise.reject(blockedError());
-      return nativeFetch.apply(this, arguments);
-    };
-  }
-
-  // XMLHttpRequest
-  const XHR = globalThis.XMLHttpRequest;
-  if (XHR && XHR.prototype && typeof XHR.prototype.open === "function") {
-    const nativeOpen = XHR.prototype.open;
-    const nativeSend = XHR.prototype.send;
-
-    XHR.prototype.open = function (method, url) {
-      try { this.__syar_blocked = isBlocked(String(url || "")); } catch (_) { this.__syar_blocked = false; }
-      return nativeOpen.apply(this, arguments);
-    };
-
-    XHR.prototype.send = function () {
-      if (this.__syar_blocked) {
-        try { this.abort(); } catch (_) {}
-        throw blockedError();
+      // Always allow Google APIs
+      for (const domain of ALLOWED_GOOGLE_DOMAINS) {
+        if (hostname.includes(domain) || hostname.endsWith(domain)) {
+          return false;
+        }
       }
-      return nativeSend.apply(this, arguments);
+
+      // Block specific domains
+      for (const domain of BLOCKED_DOMAINS) {
+        if (hostname === domain || hostname.endsWith('.' + domain)) {
+          console.warn(`[Network Guard] 🚫 Blocked domain: ${hostname}`);
+          return true;
+        }
+      }
+
+      // Block by pattern
+      for (const pattern of BLOCKED_PATTERNS) {
+        if (pattern.test(hostname) || pattern.test(fullUrl)) {
+          console.warn(`[Network Guard] 🚫 Blocked pattern match: ${hostname}`);
+          return true;
+        }
+      }
+
+      // Block by keywords
+      for (const keyword of BLOCKED_KEYWORDS) {
+        if (fullUrl.includes(keyword)) {
+          console.warn(`[Network Guard] 🚫 Blocked keyword: ${keyword} in ${hostname}`);
+          return true;
+        }
+      }
+
+      return false;
+    } catch (e) {
+      // If URL parsing fails, don't block
+      return false;
+    }
+  }
+
+  /**
+   * Create a blocked response
+   */
+  function createBlockedResponse() {
+    return new Response(JSON.stringify({ 
+      error: 'Request blocked by Network Guard',
+      blocked: true 
+    }), {
+      status: 403,
+      statusText: 'Blocked by Network Guard',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Store original functions
+  const originalFetch = window.fetch;
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  const originalXHRSend = XMLHttpRequest.prototype.send;
+  const OriginalWebSocket = window.WebSocket;
+
+  /**
+   * Override fetch
+   */
+  window.fetch = function(input, init) {
+    const url = typeof input === 'string' ? input : (input?.url || input?.href || '');
+    
+    if (shouldBlock(url)) {
+      console.warn(`[Network Guard] 🚫 Blocked fetch: ${url}`);
+      return Promise.resolve(createBlockedResponse());
+    }
+    
+    return originalFetch.apply(this, arguments);
+  };
+
+  /**
+   * Override XMLHttpRequest
+   */
+  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+    this._guardUrl = url;
+    this._guardBlocked = shouldBlock(url);
+    
+    if (this._guardBlocked) {
+      console.warn(`[Network Guard] 🚫 Blocked XHR: ${url}`);
+    }
+    
+    return originalXHROpen.call(this, method, url, ...rest);
+  };
+
+  XMLHttpRequest.prototype.send = function(data) {
+    if (this._guardBlocked) {
+      // Simulate a failed request
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 403 });
+        Object.defineProperty(this, 'statusText', { value: 'Blocked' });
+        Object.defineProperty(this, 'responseText', { 
+          value: JSON.stringify({ error: 'Blocked by Network Guard' }) 
+        });
+        this.dispatchEvent(new Event('error'));
+        if (this.onerror) this.onerror(new Error('Blocked by Network Guard'));
+      }, 0);
+      return;
+    }
+    
+    return originalXHRSend.call(this, data);
+  };
+
+  /**
+   * Override WebSocket
+   */
+  window.WebSocket = function(url, protocols) {
+    if (shouldBlock(url)) {
+      console.warn(`[Network Guard] 🚫 Blocked WebSocket: ${url}`);
+      throw new Error('WebSocket blocked by Network Guard');
+    }
+    return new OriginalWebSocket(url, protocols);
+  };
+  window.WebSocket.prototype = OriginalWebSocket.prototype;
+  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+
+  /**
+   * Override sendBeacon
+   */
+  if (navigator.sendBeacon) {
+    const originalBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function(url, data) {
+      if (shouldBlock(url)) {
+        console.warn(`[Network Guard] 🚫 Blocked sendBeacon: ${url}`);
+        return false;
+      }
+      return originalBeacon(url, data);
     };
   }
+
+  /**
+   * Override Image (for tracking pixels)
+   */
+  const OriginalImage = window.Image;
+  window.Image = function(width, height) {
+    const img = new OriginalImage(width, height);
+    const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set;
+    
+    Object.defineProperty(img, 'src', {
+      set: function(value) {
+        if (shouldBlock(value)) {
+          console.warn(`[Network Guard] 🚫 Blocked image: ${value}`);
+          return;
+        }
+        originalSrcSetter.call(this, value);
+      },
+      get: function() {
+        return this.getAttribute('src');
+      }
+    });
+    
+    return img;
+  };
+
+  // Log initialization
+  console.log('[Network Guard] ✅ Initialized');
+  console.log('[Network Guard] 📋 Blocking domains:', BLOCKED_DOMAINS.length);
+  console.log('[Network Guard] ✅ Allowing Google APIs:', ALLOWED_GOOGLE_DOMAINS.length);
+  
+  // Expose for debugging
+  window.__networkGuard = {
+    shouldBlock,
+    BLOCKED_DOMAINS,
+    BLOCKED_PATTERNS,
+    ALLOWED_GOOGLE_DOMAINS,
+    version: '2.0.0'
+  };
+
 })();
